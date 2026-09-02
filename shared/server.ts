@@ -16,7 +16,7 @@
  *   - "Reset all answers" is `run + 1`, an O(1) write, instead of deleting
  *     thousands of keys.
  */
-import { getStore, type Store } from '@netlify/blobs'
+import { getDeployStore, getStore, type Store } from '@netlify/blobs'
 import {
   DEFAULT_DURATION,
   MAX_DEVICES,
@@ -40,8 +40,21 @@ import {
  * Strong consistency is not optional: a Leader pressing "Next question" and a
  * respondent's very next fetch are causally linked, and eventual consistency
  * would show them the previous question.
+ *
+ * Preview deploys get a store scoped to their own deploy, because a global
+ * store is shared with production: without this, opening a pull request's
+ * preview and pressing Start would be pressing Start on a live poll. Local dev
+ * and production both stay on the global store, which is where every poll code
+ * anyone has been given actually lives.
  */
-const store = (): Store => getStore({ name: 'anketo', consistency: 'strong' })
+const PREVIEW_CONTEXTS = new Set(['deploy-preview', 'branch-deploy'])
+
+const store = (): Store => {
+  const options = { name: 'anketo', consistency: 'strong' } as const
+  return PREVIEW_CONTEXTS.has(process.env.CONTEXT ?? '')
+    ? getDeployStore(options)
+    : getStore(options)
+}
 
 const POLL_KEY = (id: string) => `polls/${id}`
 const RUN_PREFIX = (id: string, run: number) => `a/${id}/${run}/`

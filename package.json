@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke": "node scripts/smoke.mjs"
   },
   "repository": {
     "type": "git",
@@ -23,13 +24,13 @@
   },
   "homepage": "https://github.com/abdelazer/anketo#readme",
   "devDependencies": {
-    "@netlify/blobs": "^11.0.3",
     "@types/node": "^26.4.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"
   },
   "dependencies": {
+    "@netlify/blobs": "^11.0.3",
     "qrcode-generator": "^2.0.4"
   },
   "private": true

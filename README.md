@@ -31,8 +31,20 @@ npm run typecheck
 
 `netlify dev` is required rather than plain `vite`: the API lives in Netlify
 Functions and the store is Netlify Blobs, neither of which the Vite dev server
-provides. To deploy, connect the repo to Netlify — `netlify.toml` has the build
-command, the `/api/*` rewrite, and the SPA catch-all already set.
+provides.
+
+To deploy, connect the repo to Netlify — `netlify.toml` has the build command,
+the Node version, the `/api/*` rewrite and the SPA catch-all already set. Then
+check the deploy with
+
+```sh
+npm run smoke -- https://<deploy-url>
+```
+
+which takes seconds and asserts the things that are specific to being deployed
+rather than to the logic. `docs/deploy-plan.md` is the full runbook. Preview
+deploys write to their own Blobs store, so a pull request's preview can never
+touch a live poll.
 
 ## How it works
 
