@@ -2,11 +2,15 @@ import { api, ApiError } from '../api'
 import { h, replace, setText, shareLink, toast } from '../dom'
 import { navigate, pollUrl } from '../router'
 import { PollStore } from '../store'
+import { grownField } from './fields'
 import { brand, errorScreen, spinner } from './shell'
 import {
   MAX_DURATION,
+  MAX_OPTION_LEN,
   MAX_OPTIONS,
+  MAX_PROMPT_LEN,
   MAX_QUESTIONS,
+  MAX_TITLE_LEN,
   MIN_DURATION,
   type Poll,
   type Question,
@@ -127,6 +131,25 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
     banner.hidden = false
   }
 
+  /**
+   * Enter moves to the next field instead of typing a newline.
+   *
+   * These are textareas so that a long prompt or option stays visible while it
+   * is being written, not because a prompt is a multiline thing — a line break
+   * in one collapses to a space everywhere it is displayed. So Enter keeps the
+   * meaning it had when these were `<input>`s: this one is finished, on to the
+   * next. On the last field it dismisses the keyboard rather than trapping it.
+   */
+  function advanceOnEnter(event: KeyboardEvent): void {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    const here = event.currentTarget as HTMLTextAreaElement
+    const fields = [...screen.querySelectorAll<HTMLTextAreaElement>('.field--auto:not(:disabled)')]
+    const next = fields[fields.indexOf(here) + 1]
+    if (next) next.focus()
+    else here.blur()
+  }
+
   // --- Rendering -----------------------------------------------------------
 
   function adopt(poll: Poll, options: { force?: boolean } = {}): void {
@@ -152,18 +175,20 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
     if (!draft) return
     const poll = draft
 
-    const title = h('input', {
+    const title = h('textarea', {
       class: 'field field--prompt',
+      rows: '1',
       value: poll.title,
       placeholder: 'Poll name (optional)',
-      maxlength: '200',
+      maxlength: String(MAX_TITLE_LEN),
       disabled: locked,
       'aria-label': 'Poll name',
       on: {
         input: (event) => {
-          poll.title = (event.target as HTMLInputElement).value
+          poll.title = (event.target as HTMLTextAreaElement).value
           markDirty()
         },
+        keydown: advanceOnEnter,
       },
     })
 
@@ -212,7 +237,7 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
 
     replace(
       setupCard,
-      title,
+      grownField(title, MAX_TITLE_LEN),
       h(
         'div',
         { class: 'row row--wrap' },
@@ -288,20 +313,25 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
           renderQuestions(locked)
         }),
       ),
-      h('input', {
-        class: 'field field--prompt',
-        value: question.prompt,
-        placeholder: 'What do you want to ask?',
-        maxlength: '200',
-        disabled: locked,
-        'aria-label': `Question ${index + 1} prompt`,
-        on: {
-          input: (event) => {
-            question.prompt = (event.target as HTMLInputElement).value
-            markDirty()
+      grownField(
+        h('textarea', {
+          class: 'field field--prompt',
+          rows: '1',
+          value: question.prompt,
+          placeholder: 'What do you want to ask?',
+          maxlength: String(MAX_PROMPT_LEN),
+          disabled: locked,
+          'aria-label': `Question ${index + 1} prompt`,
+          on: {
+            input: (event) => {
+              question.prompt = (event.target as HTMLTextAreaElement).value
+              markDirty()
+            },
+            keydown: advanceOnEnter,
           },
-        },
-      }),
+        }),
+        MAX_PROMPT_LEN,
+      ),
       question.type === 'choice'
         ? h(
             'div',
@@ -311,20 +341,25 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
                 'div',
                 { class: 'row option-row' },
                 h('span', { class: 'option-dot', 'aria-hidden': 'true' }),
-                h('input', {
-                  class: 'field',
-                  value: option.text,
-                  placeholder: `Option ${oi + 1}`,
-                  maxlength: '80',
-                  disabled: locked,
-                  'aria-label': `Question ${index + 1}, option ${oi + 1}`,
-                  on: {
-                    input: (event) => {
-                      option.text = (event.target as HTMLInputElement).value
-                      markDirty()
+                grownField(
+                  h('textarea', {
+                    class: 'field',
+                    rows: '1',
+                    value: option.text,
+                    placeholder: `Option ${oi + 1}`,
+                    maxlength: String(MAX_OPTION_LEN),
+                    disabled: locked,
+                    'aria-label': `Question ${index + 1}, option ${oi + 1}`,
+                    on: {
+                      input: (event) => {
+                        option.text = (event.target as HTMLTextAreaElement).value
+                        markDirty()
+                      },
+                      keydown: advanceOnEnter,
                     },
-                  },
-                }),
+                  }),
+                  MAX_OPTION_LEN,
+                ),
                 iconButton('Remove option', '✕', locked || question.options.length <= 2, () => {
                   question.options.splice(oi, 1)
                   markDirty()
@@ -349,7 +384,7 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
               '+ Add option',
             ),
           )
-        : h('p', { class: 'muted small', text: 'People will type a short answer.' }),
+        : h('p', { class: 'muted small', text: 'People will type their own answer.' }),
     )
   }
 
@@ -376,7 +411,7 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
               markDirty()
               renderQuestions(false)
               // Drop the caret straight into the new prompt.
-              const cards = questionList.querySelectorAll<HTMLInputElement>('.field--prompt')
+              const cards = questionList.querySelectorAll<HTMLTextAreaElement>('.field--prompt')
               cards[cards.length - 1]?.focus()
             },
           },

@@ -33,16 +33,32 @@ npm run typecheck
 Functions and the store is Netlify Blobs, neither of which the Vite dev server
 provides.
 
-To deploy, connect the repo to Netlify — `netlify.toml` has the build command,
-the Node version, the `/api/*` rewrite and the SPA catch-all already set. Then
-check the deploy with
+## Deploying
+
+Production is <https://anketo-493.netlify.app>, and it is pushed by hand — there
+is no CI, so a deploy is someone running this sequence. It needs the Netlify CLI
+(`brew install netlify-cli`), logged in to the team that owns the site.
+`netlify.toml` already carries the build command, the Node version, the `/api/*`
+rewrite and the SPA catch-all, so there is nothing to set per deploy.
 
 ```sh
-npm run smoke -- https://<deploy-url>
+netlify link                              # once per clone; netlify status to confirm
+npm ci && npm run build                   # build from a clean tree
+netlify deploy                            # draft URL — production is untouched
+npm run smoke -- https://<draft-url>      # seconds, and it is the whole gate
+netlify deploy --prod                     # promote
+npm run smoke -- https://anketo-493.netlify.app
 ```
 
-which takes seconds and asserts the things that are specific to being deployed
-rather than to the logic. `docs/deploy-plan.md` is the full runbook.
+The draft step earns its half minute: a preview deploy writes to its own Blobs
+store, so smoke against it exercises the real backend — functions bundled,
+writes visible to the next read, no tally on the wire early — without touching a
+live poll. A bad promote is undone with `netlify rollback`, or by publishing an
+earlier deploy from the UI; there are no migrations to unwind.
+
+`docs/deploy-plan.md` is the full runbook: proving preview isolation, the
+browser checks neither suite covers (QR code, share sheet, two Lead devices),
+and the free-tier limits worth watching.
 
 The Blobs store holding live polls is reached only by an environment that
 identifies itself as production or as local dev; anything else writes to a
@@ -152,19 +168,31 @@ option doesn't shift hue between questions. Text answers render as a response
 wall rather than a scattered word cloud: identical answers merge, and
 repetition drives size, emphasis *and* an explicit `×N` badge, so the popular
 answers dominate visually while every answer stays readable and every count
-stays checkable.
+stays checkable. Past about ninety characters an answer is a paragraph rather
+than a label, so it drops to reading size and keeps its line breaks: size means
+"lots of people said this", and scaling a long answer up would make the least
+repeated one the loudest thing on the screen.
+
+Every field that takes prose grows to fit what is in it — no sideways
+scrolling, no fixed row count — and its character counter appears only once the
+limit is close, so a cap is something you see coming rather than a keyboard
+that goes dead. The question prompt steps down a type scale as it gets longer,
+which keeps the options on screen underneath it.
 
 ## Limits
 
-Per poll: 50 questions, 10 options each, 400 devices per question, 140
-characters per text answer. Polls have no expiry, and answer keys from previous
-runs are orphaned rather than deleted — both fine at this scale, and worth
-revisiting if this ever ran somewhere busy.
+Per poll: 50 questions, 10 options each, 400 devices per question. Text is
+capped at 200 characters for a poll name, 300 for a question prompt, 200 for an
+option and 2,000 for a free-text answer — set where the room stops being able
+to read the thing rather than where a storage bill starts, since none of this
+is near a limit Blobs cares about. Polls have no expiry, and answer keys from
+previous runs are orphaned rather than deleted — both fine at this scale, and
+worth revisiting if this ever ran somewhere busy.
 
 ## Tests
 
 ```sh
-npm test        # 43 API integration tests against a real netlify dev
+npm test        # 51 API integration tests against a real netlify dev
 ```
 
 `tests/setup/netlify-dev.ts` reuses a dev server already on :8888 or boots one

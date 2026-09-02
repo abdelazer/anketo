@@ -117,7 +117,8 @@ Pure functions, no store needed.
 
 ### `sanitizeDraft`
 - `durationSec` clamps to 1–300; non-numeric falls back to the existing value.
-- Prompts truncate at 200, options at 80, questions at 50, options at 10.
+- Prompts truncate at `MAX_PROMPT_LEN`, titles at `MAX_TITLE_LEN`, options at
+  `MAX_OPTION_LEN`, questions at 50, options at 10.
 - Missing or malformed question/option ids are regenerated.
 - **Duplicate ids are de-duplicated** — two questions sharing an id would
   silently merge their answers.
@@ -129,7 +130,9 @@ Pure functions, no store needed.
 ### `sanitizeAnswer`
 - A choice value not among the question's option ids is rejected.
 - Empty or whitespace-only text is rejected.
-- Text truncates at 140.
+- Text at exactly `MAX_TEXT_ANSWER_LEN` is accepted, newlines and all, and
+  comes back unchanged; a single character more is **rejected**, not truncated.
+  A draft is worth salvaging half of, somebody's paragraph is not.
 
 ### `assertDeviceId` — treat as a security test
 Device ids are interpolated directly into blob keys. Assert rejection of:
