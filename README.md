@@ -1,0 +1,2 @@
+# anketo
+Simple snap polls
