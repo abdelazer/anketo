@@ -33,16 +33,32 @@ npm run typecheck
 Functions and the store is Netlify Blobs, neither of which the Vite dev server
 provides.
 
-To deploy, connect the repo to Netlify — `netlify.toml` has the build command,
-the Node version, the `/api/*` rewrite and the SPA catch-all already set. Then
-check the deploy with
+## Deploying
+
+Production is <https://anketo-493.netlify.app>, and it is pushed by hand — there
+is no CI, so a deploy is someone running this sequence. It needs the Netlify CLI
+(`brew install netlify-cli`), logged in to the team that owns the site.
+`netlify.toml` already carries the build command, the Node version, the `/api/*`
+rewrite and the SPA catch-all, so there is nothing to set per deploy.
 
 ```sh
-npm run smoke -- https://<deploy-url>
+netlify link                              # once per clone; netlify status to confirm
+npm ci && npm run build                   # build from a clean tree
+netlify deploy                            # draft URL — production is untouched
+npm run smoke -- https://<draft-url>      # seconds, and it is the whole gate
+netlify deploy --prod                     # promote
+npm run smoke -- https://anketo-493.netlify.app
 ```
 
-which takes seconds and asserts the things that are specific to being deployed
-rather than to the logic. `docs/deploy-plan.md` is the full runbook.
+The draft step earns its half minute: a preview deploy writes to its own Blobs
+store, so smoke against it exercises the real backend — functions bundled,
+writes visible to the next read, no tally on the wire early — without touching a
+live poll. A bad promote is undone with `netlify rollback`, or by publishing an
+earlier deploy from the UI; there are no migrations to unwind.
+
+`docs/deploy-plan.md` is the full runbook: proving preview isolation, the
+browser checks neither suite covers (QR code, share sheet, two Lead devices),
+and the free-tier limits worth watching.
 
 The Blobs store holding live polls is reached only by an environment that
 identifies itself as production or as local dev; anything else writes to a
