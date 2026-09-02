@@ -387,6 +387,49 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
     return h('div', { class: 'row add-row' }, add('choice', '+ Choice'), add('text', '+ Text'))
   }
 
+  /**
+   * Duplicate is the only editing move available once a poll has started:
+   * Create locks at Start Poll, and the alternative — Reset — buys an editable
+   * poll by destroying the answers. A copy keeps both.
+   */
+  function duplicateButton(): HTMLButtonElement {
+    const button = h(
+      'button',
+      {
+        class: 'btn btn--ghost',
+        type: 'button',
+        title: 'Start a new draft with the same questions',
+        on: {
+          click: async () => {
+            button.disabled = true
+            setText(button, 'Duplicating…')
+            const restore = () => {
+              button.disabled = false
+              setText(button, 'Duplicate')
+            }
+            try {
+              // The server copies what is *stored*, so anything still sitting in
+              // the save debounce has to land first or the copy misses it.
+              await flush()
+              if (dirty()) {
+                toast('Your latest edits have not saved yet — try again in a moment.', 'error')
+                restore()
+                return
+              }
+              const { id } = await api.create(pollId)
+              navigate(`/p/${id}/create`)
+            } catch (error) {
+              toast((error as Error).message, 'error')
+              restore()
+            }
+          },
+        },
+      },
+      'Duplicate',
+    )
+    return button
+  }
+
   function utilityRow(): HTMLElement {
     return h(
       'div',
@@ -400,6 +443,7 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
         },
         'Share edit link',
       ),
+      duplicateButton(),
       h('span', { class: 'spacer' }),
       h(
         'button',
@@ -446,8 +490,8 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
               class: 'small secondary-text',
               text:
                 store.snapshot?.poll.phase === 'complete'
-                  ? 'This poll has finished. Reset it to edit or run it again.'
-                  : `This poll is running${answered ? ` — ${answered} answers so far` : ''}. Reset it to edit.`,
+                  ? 'This poll has finished. Reset it to run it again, or duplicate it to keep these results.'
+                  : `This poll is running${answered ? ` — ${answered} answers so far` : ''}. Reset it to edit, or duplicate it.`,
             }),
             h('a', {
               class: 'btn btn--primary btn--block btn--big',

@@ -128,9 +128,26 @@ export async function updatePoll(id: string, apply: (poll: Poll) => Poll): Promi
   return next
 }
 
-export async function createPoll(): Promise<Poll> {
+/**
+ * A new poll, optionally seeded from an existing one.
+ *
+ * Only the authored half is copied — title, timer and questions. Run state
+ * (`run`, `phase`, `currentIndex`, `readyAtByQ`) and every answer key stay with
+ * the original, which is the whole point: Create is read-only from Start Poll
+ * onward, so duplicating is how you run a poll again without resetting away the
+ * results you already have.
+ *
+ * The source is put through `sanitizeDraft` rather than spread in directly. It
+ * is a document read back out of the store, possibly written by an older
+ * version of this code, so it gets the same treatment as a draft off the wire:
+ * clamped, re-limited, and guaranteed free of duplicate ids. Question and
+ * option ids are carried over as-is where they are well formed — they only have
+ * to be unique within a poll, and every answer key is already namespaced by
+ * poll id, so no answer of the original's can be reached through the copy.
+ */
+export async function createPoll(source?: Poll): Promise<Poll> {
   const now = Date.now()
-  const poll: Poll = {
+  const blank: Poll = {
     id: newId(),
     createdAt: now,
     updatedAt: now,
@@ -143,9 +160,23 @@ export async function createPoll(): Promise<Poll> {
     currentIndex: -1,
     readyAtByQ: {},
   }
+
+  const poll = source
+    ? sanitizeDraft({ ...source, title: copyTitle(source.title) }, blank)
+    : blank
+
   const result = await store().setJSON(POLL_KEY(poll.id), poll, { onlyIfNew: true })
   if (!result.modified) throw new HttpError(409, 'Could not create poll — please retry.')
   return poll
+}
+
+/**
+ * Two polls that differ only in their id are hard to tell apart on a projected
+ * Lead screen, so a copy says so in its name. An untitled poll stays untitled
+ * rather than becoming "Copy of ".
+ */
+function copyTitle(title: string): string {
+  return title.trim() ? `Copy of ${title}` : ''
 }
 
 export function blankQuestion(type: Question['type']): Question {

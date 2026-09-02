@@ -125,7 +125,13 @@ state, then reconciles with the server a moment later.
   still answer a question whose countdown has passed, but nobody can change an
   answer once the room is looking at the results.
 - **Create is read-only while a poll is running**, because reordering or
-  deleting questions mid-flight would orphan recorded answers.
+  deleting questions mid-flight would orphan recorded answers. **Duplicate** is
+  the way out: it makes a fresh draft carrying the title, timer and questions
+  but none of the run state, so the same questions can be run at the next
+  meeting while the finished poll keeps its results. Resetting is the
+  destructive alternative, and now rarely the one you want. The copy is built
+  on the server from the stored document, so what you get is what is saved, not
+  what one device happens to be holding.
 - **Text answers merge** on case, accents and punctuation when tallied, and
   display the most common original spelling ("New York", not "new york").
 
@@ -154,7 +160,7 @@ revisiting if this ever ran somewhere busy.
 ## Tests
 
 ```sh
-npm test        # 38 API integration tests against a real netlify dev
+npm test        # 43 API integration tests against a real netlify dev
 ```
 
 `tests/setup/netlify-dev.ts` reuses a dev server already on :8888 or boots one

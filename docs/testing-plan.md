@@ -2,7 +2,7 @@
 
 For a session starting cold.
 
-**Status: layer 3 (API integration) is implemented and passing** — 38 tests in
+**Status: layer 3 (API integration) is implemented and passing** — 43 tests in
 `tests/api.test.ts`, run with `npm test`. Layers 1, 2, 4 and 5 are not written
 yet; the assertions below are the specification for them.
 
@@ -142,7 +142,7 @@ its own key space.
 
 ## Layer 3 — API integration (against `netlify dev`) — **DONE**
 
-Implemented in `tests/api.test.ts` (38 tests, ~35s). `tests/setup/netlify-dev.ts`
+Implemented in `tests/api.test.ts` (43 tests, ~37s). `tests/setup/netlify-dev.ts`
 reuses a dev server already listening on :8888, or boots one and tears it down
 afterwards, so `npm test` works from a cold checkout. Point it elsewhere with
 `ANKETO_BASE_URL` to run the same suite against a deploy preview.
@@ -204,14 +204,25 @@ The assertions, all covered:
     submission racing the reset does not appear in the new run.
 26. Answering a poll that is back in draft is refused with 409.
 
+### Duplicate
+27. `POST /api/poll` with `copyFrom` copies title, timer and questions, and the
+    copy is a draft: `phase` draft, `currentIndex` -1, `run` 1, empty
+    `readyAtByQ` — whatever state the source was in.
+28. An untitled source stays untitled rather than becoming "Copy of ".
+29. **The copy carries none of the source's answers, and the source keeps its
+    own** — the property that makes duplicating the non-destructive
+    alternative to reset.
+30. The copy is editable while the poll it came from is locked mid-run.
+31. A `copyFrom` naming no poll returns 404.
+
 ### Validation and errors
-27. An unknown poll id returns 404 with a readable message.
-28. Editing a running poll is refused with 409.
-29. Duration, prompt length and duplicate-option-id sanitising all hold over
+32. An unknown poll id returns 404 with a readable message.
+33. Editing a running poll is refused with 409.
+34. Duration, prompt length and duplicate-option-id sanitising all hold over
     the real API, not just the unit under test.
-30. A hostile draft save cannot move the poll's run state — `phase`,
+35. A hostile draft save cannot move the poll's run state — `phase`,
     `currentIndex`, `run` and `readyAtByQ` are ignored from the payload.
-31. **Completing a poll does not reveal a question whose countdown never
+36. **Completing a poll does not reveal a question whose countdown never
     expired.** Found by a failing test while porting this suite: reveal is a
     function of the countdown, not of the poll being over, so cutting a poll
     short must not hand the room answers it never earned.

@@ -18,7 +18,12 @@ export default async (req: Request): Promise<Response> => {
     const url = new URL(req.url)
 
     if (req.method === 'POST') {
-      const poll = await createPoll()
+      // A plain "new poll" POST carries no body at all; a duplicate names the
+      // poll to copy. Reading the source here rather than trusting a client's
+      // copy of it means the new poll starts from what is actually stored.
+      const body = (await req.json().catch(() => ({}))) as { copyFrom?: unknown }
+      const copyFrom = typeof body.copyFrom === 'string' ? body.copyFrom : null
+      const poll = await createPoll(copyFrom ? await loadPoll(copyFrom) : undefined)
       return json({ id: poll.id }, 201)
     }
 

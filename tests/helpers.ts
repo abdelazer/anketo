@@ -18,7 +18,12 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<Ap
 type ErrorBody = { error: string }
 
 export const api = {
-  create: () => call<{ id: string }>('POST', '/api/poll'),
+  create: (copyFrom?: string) =>
+    call<{ id: string } & Partial<ErrorBody>>(
+      'POST',
+      '/api/poll',
+      copyFrom === undefined ? undefined : { copyFrom },
+    ),
 
   snapshot: (id: string, view: 'lead' | 'respond' | 'create', device?: string) => {
     const params = new URLSearchParams({ id, view })
