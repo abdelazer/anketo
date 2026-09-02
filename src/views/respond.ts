@@ -22,6 +22,14 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
   let viewIndex = Number(safeGet(positionKey) ?? '-1')
   let sceneKey = ''
   let pending: string | null = null
+  /** Which question the stage is currently showing, for reading its answer box. */
+  let staged: string | null = null
+  /**
+   * Text typed into the answer box but not sent yet. A scene rebuild replaces
+   * the textarea, so the unsent text has to be read off the old one first or a
+   * half-written answer vanishes when the timer expires mid-sentence.
+   */
+  let draft: { questionId: string; value: string } | null = null
 
   const stage = h('div', { class: 'grow stage' })
   const bottom = h('div', { class: 'respond-bottom' })
@@ -70,14 +78,22 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
 
     const key = sceneFor(snapshot)
     if (key !== sceneKey) {
+      captureDraft()
       sceneKey = key
       buildScene(snapshot, key)
     }
     patchScene(snapshot, key)
   }
 
+  /** Read the answer box before it is torn down, against the question it belongs to. */
+  function captureDraft(): void {
+    const input = stage.querySelector<HTMLTextAreaElement>('textarea.text-answer')
+    if (staged && input) draft = { questionId: staged, value: input.value }
+  }
+
   function buildScene(snapshot: Snapshot, key: string): void {
     const { poll } = snapshot
+    staged = null
 
     if (key === 'waiting') {
       replace(
@@ -114,6 +130,10 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
 
     const mine = snapshot.mine?.[question.id]
     const locked = isRevealed(poll, question.id, store.serverNow())
+    // Whatever is in the box wins: it is either the answer being sent, the one
+    // already sent, or an edit of it that no other source knows about yet.
+    const typed = draft?.questionId === question.id ? draft.value : undefined
+    staged = question.id
 
     replace(
       stage,
@@ -125,7 +145,8 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
         // Both faces show the optimistic answer: a typed answer must survive in
         // the box until the POST lands, or a failed send leaves nothing to retry.
         selected: pending ?? mine,
-        textValue: pending ?? mine,
+        textValue: typed ?? pending ?? mine,
+        answered: (pending ?? mine) !== undefined,
         // A locked question stays readable but stops accepting changes.
         disabled: locked && mine !== undefined,
         onChoose: (optionId) => void submit(question.id, optionId),

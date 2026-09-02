@@ -14,6 +14,9 @@ export interface QuestionFaceOptions {
   options?: Question['options']
   selected?: string
   textValue?: string
+  /** Whether an answer is actually on record, as opposed to text merely sitting
+   * in the box. Defaults to the latter when not given. */
+  answered?: boolean
   onChoose?: (optionId: string) => void
   onText?: (value: string) => void
   disabled?: boolean
@@ -116,7 +119,7 @@ function textBody(config: QuestionFaceOptions): HTMLElement {
         },
       },
     },
-    config.textValue ? 'Update answer' : 'Send answer',
+    (config.answered ?? Boolean(config.textValue)) ? 'Update answer' : 'Send answer',
   )
 
   input.addEventListener('keydown', (event) => {
