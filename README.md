@@ -148,19 +148,31 @@ option doesn't shift hue between questions. Text answers render as a response
 wall rather than a scattered word cloud: identical answers merge, and
 repetition drives size, emphasis *and* an explicit `×N` badge, so the popular
 answers dominate visually while every answer stays readable and every count
-stays checkable.
+stays checkable. Past about ninety characters an answer is a paragraph rather
+than a label, so it drops to reading size and keeps its line breaks: size means
+"lots of people said this", and scaling a long answer up would make the least
+repeated one the loudest thing on the screen.
+
+Every field that takes prose grows to fit what is in it — no sideways
+scrolling, no fixed row count — and its character counter appears only once the
+limit is close, so a cap is something you see coming rather than a keyboard
+that goes dead. The question prompt steps down a type scale as it gets longer,
+which keeps the options on screen underneath it.
 
 ## Limits
 
-Per poll: 50 questions, 10 options each, 400 devices per question, 140
-characters per text answer. Polls have no expiry, and answer keys from previous
-runs are orphaned rather than deleted — both fine at this scale, and worth
-revisiting if this ever ran somewhere busy.
+Per poll: 50 questions, 10 options each, 400 devices per question. Text is
+capped at 200 characters for a poll name, 300 for a question prompt, 200 for an
+option and 2,000 for a free-text answer — set where the room stops being able
+to read the thing rather than where a storage bill starts, since none of this
+is near a limit Blobs cares about. Polls have no expiry, and answer keys from
+previous runs are orphaned rather than deleted — both fine at this scale, and
+worth revisiting if this ever ran somewhere busy.
 
 ## Tests
 
 ```sh
-npm test        # 43 API integration tests against a real netlify dev
+npm test        # 51 API integration tests against a real netlify dev
 ```
 
 `tests/setup/netlify-dev.ts` reuses a dev server already on :8888 or boots one

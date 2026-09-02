@@ -7,6 +7,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import { api, device, makePoll, ok, sleep, waitForReveal } from './helpers'
+import {
+  MAX_OPTION_LEN,
+  MAX_PROMPT_LEN,
+  MAX_TEXT_ANSWER_LEN,
+  MAX_TITLE_LEN,
+} from '../shared/poll'
 
 const CHOICE = {
   type: 'choice' as const,
@@ -241,6 +247,29 @@ describe('answer rules', () => {
     ok(await api.act(poll.id, 'start'))
     const result = await api.answer(poll.id, poll.q[0], device(1), '   ')
     expect(result.status).toBe(400)
+  })
+
+  it('accepts a multi-paragraph text answer up to the limit, and tallies it whole', async () => {
+    // The point of the limit being what it is: a real long-form answer, with
+    // newlines, arrives and comes back byte for byte rather than truncated.
+    const poll = await makePoll([TEXT], 1)
+    ok(await api.act(poll.id, 'start'))
+
+    const essay = 'First paragraph.\n\nSecond paragraph.\n\n'.padEnd(MAX_TEXT_ANSWER_LEN, 'x')
+    expect(essay).toHaveLength(MAX_TEXT_ANSWER_LEN)
+    ok(await api.answer(poll.id, poll.q[0], device(1), essay))
+
+    await waitForReveal(poll)
+    const tally = ok(await api.snapshot(poll.id, 'lead')).tallies[poll.q[0]]
+    expect(tally.type === 'text' && tally.entries[0].text).toBe(essay)
+  })
+
+  it('refuses a text answer past the limit rather than silently cutting it', async () => {
+    const poll = await makePoll([TEXT], 10)
+    ok(await api.act(poll.id, 'start'))
+    const result = await api.answer(poll.id, poll.q[0], device(1), 'x'.repeat(MAX_TEXT_ANSWER_LEN + 1))
+    expect(result.status).toBe(400)
+    expect(result.body.error).toMatch(/limited to/i)
   })
 
   it('refuses an answer to a question the room has not reached', async () => {
@@ -480,11 +509,11 @@ describe('validation and errors', () => {
     )
 
     expect(saved.poll.durationSec).toBe(300)
-    expect(saved.poll.title).toHaveLength(200)
-    expect(saved.poll.questions[0].prompt).toHaveLength(200)
+    expect(saved.poll.title).toHaveLength(MAX_TITLE_LEN)
+    expect(saved.poll.questions[0].prompt).toHaveLength(MAX_PROMPT_LEN)
     const [first, second] = saved.poll.questions[0].options
     expect(first.id).not.toBe(second.id)
-    expect(first.text).toHaveLength(80)
+    expect(first.text).toHaveLength(MAX_OPTION_LEN)
   })
 
   it('clamps duration upward from below the minimum', async () => {

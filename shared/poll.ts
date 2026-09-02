@@ -14,9 +14,23 @@ export const DEFAULT_DURATION = 20
 
 export const MAX_QUESTIONS = 50
 export const MAX_OPTIONS = 10
-export const MAX_PROMPT_LEN = 200
-export const MAX_OPTION_LEN = 80
-export const MAX_TEXT_ANSWER_LEN = 140
+
+/**
+ * Text limits.
+ *
+ * These are here to stop a poll document growing without bound, not to make
+ * people write shorter — so they are set at the point where the room stops
+ * being able to read the thing, and the fields that carry them grow and count
+ * down rather than going dead under someone's thumb.
+ *
+ * A prompt and an option have to survive being projected at the size Lead
+ * renders them; a free-text answer only has to be readable in the response
+ * wall, and is by far the most likely to be a real paragraph of writing.
+ */
+export const MAX_TITLE_LEN = 200
+export const MAX_PROMPT_LEN = 300
+export const MAX_OPTION_LEN = 200
+export const MAX_TEXT_ANSWER_LEN = 2000
 export const MAX_DEVICES = 400
 
 export type QuestionType = 'choice' | 'text'

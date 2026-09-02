@@ -25,6 +25,7 @@ import {
   MAX_PROMPT_LEN,
   MAX_QUESTIONS,
   MAX_TEXT_ANSWER_LEN,
+  MAX_TITLE_LEN,
   MAX_DURATION,
   MIN_DURATION,
   isRevealed,
@@ -398,7 +399,7 @@ export function sanitizeDraft(incoming: unknown, base: Poll): Poll {
       return { id, type, prompt: clampText(q?.prompt, MAX_PROMPT_LEN), options }
     })
 
-  return { ...base, title: clampText(raw.title, MAX_PROMPT_LEN), durationSec, questions }
+  return { ...base, title: clampText(raw.title, MAX_TITLE_LEN), durationSec, questions }
 }
 
 export function sanitizeAnswer(question: Question, value: unknown): string {
@@ -409,7 +410,13 @@ export function sanitizeAnswer(question: Question, value: unknown): string {
     }
     return id
   }
-  const text = typeof value === 'string' ? value.trim().slice(0, MAX_TEXT_ANSWER_LEN) : ''
+  const text = typeof value === 'string' ? value.trim() : ''
   if (!text) throw new HttpError(400, 'Answer cannot be empty.')
+  // A draft is truncated because half a prompt is still a usable prompt. Half
+  // of somebody's paragraph is not, and the field they typed it into counts
+  // down to this limit, so anything over it is a client that ignored it.
+  if (text.length > MAX_TEXT_ANSWER_LEN) {
+    throw new HttpError(400, `Answers are limited to ${MAX_TEXT_ANSWER_LEN} characters.`)
+  }
   return text
 }

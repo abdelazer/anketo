@@ -72,6 +72,14 @@ export function renderBars(tally: ChoiceTally): HTMLElement {
  */
 export function renderCloud(tally: TextTally): HTMLElement {
   const LIMIT = 60
+  /**
+   * Past this, an answer is a paragraph rather than a label, and it is set at
+   * reading size no matter how often it came up. Size means "lots of people
+   * said this" — but a long answer is long whether one person wrote it or ten,
+   * so scaling it up would make the *least* repeated answer the loudest thing
+   * on a projected screen, which is exactly backwards.
+   */
+  const PHRASE_LEN = 90
   const shown = tally.entries.slice(0, LIMIT)
   const hidden = tally.entries.length - shown.length
   const max = shown[0]?.count ?? 1
@@ -88,12 +96,19 @@ export function renderCloud(tally: TextTally): HTMLElement {
       // read as 16× the ink.
       const weight = max > 1 ? Math.sqrt(entry.count / max) : 1
       const repeated = entry.count > 1
+      const long = entry.text.length > PHRASE_LEN
 
       return h(
         'span',
         {
-          class: repeated ? 'chip chip--repeated' : 'chip',
-          style: { fontSize: `${(0.95 + weight * 1.35).toFixed(2)}rem` },
+          class: [
+            'chip',
+            repeated && 'chip--repeated',
+            long && 'chip--long',
+          ]
+            .filter(Boolean)
+            .join(' '),
+          style: { fontSize: long ? '1rem' : `${(0.95 + weight * 1.35).toFixed(2)}rem` },
           'aria-label': repeated ? `${entry.text}, said ${entry.count} times` : entry.text,
         },
         h('span', { class: 'chip-text', text: entry.text }),

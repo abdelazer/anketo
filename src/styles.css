@@ -208,6 +208,22 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .field--prompt { font-size: 17px; font-weight: 600; }
 .label { font-size: 13px; font-weight: 600; color: var(--ink-2); }
 
+/* Grown by `autoGrow`, which sets an explicit height on every keystroke. The
+   overflow is `auto` rather than `hidden` so the height being briefly wrong —
+   a rotation, or a field capped by `max-height` — scrolls rather than clips. */
+.field--auto {
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.35;
+}
+
+/* A field and its counter as one column, so the counter costs no layout at
+   all until it appears. */
+.field-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field-wrap .char-count { align-self: flex-end; }
+/* Nothing to count down in a locked poll — the field cannot be typed into. */
+.field:disabled ~ .char-count { display: none; }
+
 /* --- Toast -------------------------------------------------------------- */
 
 .toast {
@@ -339,6 +355,17 @@ button, input, textarea, select { font: inherit; color: inherit; }
   color: var(--ink);
   font-weight: 600;
 }
+
+/* A paragraph-length answer reads as a block: left-aligned, measured to a
+   comfortable line, and keeping the line breaks its author typed. */
+.chip--long {
+  border-radius: var(--radius-lg);
+  align-items: flex-start;
+  max-width: 62ch;
+  text-align: left;
+  padding: 0.7em 0.9em;
+}
+.chip-text { white-space: pre-wrap; }
 
 .chip-count {
   font-size: 0.68em;
@@ -494,8 +521,12 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .seg--on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(20, 18, 26, 0.12); }
 .seg:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.option-row { gap: 8px; }
-.option-row .field { flex: 1; min-width: 0; }
+/* The field grows downward, so its neighbours align to the first line rather
+   than drifting to the middle of a four-line option. */
+.option-row { gap: 8px; align-items: flex-start; }
+.option-row .field-wrap { flex: 1; min-width: 0; }
+.option-row .option-dot { margin-top: calc((var(--tap) - 12px) / 2); }
+.option-row .btn--icon { margin-top: calc((var(--tap) - 40px) / 2); }
 
 .option-dot {
   width: 12px;
@@ -529,7 +560,18 @@ button, input, textarea, select { font: inherit; color: inherit; }
 
 /* --- The question face (Lead and Respond share this) -------------------- */
 
-.stage { display: flex; flex-direction: column; justify-content: center; min-height: 0; }
+/* Centered while it fits, scrollable when it does not: a long prompt with a
+   full set of long options is taller than a phone, and it has to be reachable
+   rather than painted off the bottom edge. `safe center` keeps the top of an
+   overflowing face reachable; the plain `center` before it is the fallback. */
+.stage {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  justify-content: safe center;
+  min-height: 0;
+  overflow-y: auto;
+}
 
 .question-face { display: flex; flex-direction: column; gap: clamp(16px, 3vh, 32px); width: 100%; }
 
@@ -540,6 +582,10 @@ button, input, textarea, select { font: inherit; color: inherit; }
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+
+/* Step the prompt down as it gets longer, so the options stay on screen. */
+.prompt--medium { font-size: clamp(20px, 3.4vh, 34px); }
+.prompt--dense { font-size: clamp(17px, 2.5vh, 26px); }
 
 .prompt--result { font-size: clamp(18px, 3vh, 30px); color: var(--ink-2); }
 .prompt--small { font-size: 18px; }
@@ -589,7 +635,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
 
 .option-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 
-.text-answer { resize: vertical; min-height: 96px; font-size: 17px; }
+/* Grows with the answer, but stops short of pushing Send off a phone screen —
+   past that it scrolls, and the caret stays in view either way. */
+.text-answer { min-height: 96px; max-height: 45vh; font-size: 17px; }
 .text-answer--static {
   min-height: 96px;
   border: 1.5px dashed var(--line-strong);
@@ -598,6 +646,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
   place-items: center;
 }
 .char-count { font-size: 12px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.char-count--full { color: var(--danger); font-weight: 600; }
 
 /* --- Lead --------------------------------------------------------------- */
 
