@@ -212,7 +212,7 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
 
     // Rebuild the footer only when its shape changes; the timer text is patched
     // in place so it does not flicker every 200ms.
-    const shape = `${locked}:${mine !== undefined}:${showNext}`
+    const shape = `${locked}:${mine !== undefined}:${hasNext}:${showNext}`
     if (foot.getAttribute('data-shape') !== shape) {
       foot.setAttribute('data-shape', shape)
       replace(
