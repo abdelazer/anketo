@@ -118,9 +118,13 @@ state, then reconciles with the server a moment later.
   the order is stable across re-renders and refreshes — reshuffling under
   someone's thumb mid-tap is worse than not shuffling. Lead and the charts use
   the author's canonical order.
-- **Respondents move at their own pace.** The Leader making question 3 Ready
-  never yanks question 2 away from someone mid-answer; they get a Next button.
-  A phone joining late lands on the question the room is actually on.
+- **Respondents follow the room, but never mid-answer.** The Leader making
+  question 3 Ready doesn't yank question 2 away from someone still on it. Once
+  a phone is finished with its question — answered, and the countdown spent —
+  it advances on its own a beat later, so nobody has to find a button while the
+  room is already reading the next question. Anyone who hasn't answered, or
+  whose timer is still running, keeps their place and a manual Next button. A
+  phone joining late lands on the question the room is actually on.
 - **One answer per device, changeable until the timer ends.** A latecomer may
   still answer a question whose countdown has passed, but nobody can change an
   answer once the room is looking at the results.
