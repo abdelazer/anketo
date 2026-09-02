@@ -29,7 +29,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export type View = 'lead' | 'respond' | 'create'
 
 export const api = {
-  create: () => request<{ id: string }>('/api/poll', { method: 'POST' }),
+  /** With `copyFrom`, the new poll starts as a draft copy of that poll. */
+  create: (copyFrom?: string) =>
+    request<{ id: string }>('/api/poll', {
+      method: 'POST',
+      body: copyFrom ? JSON.stringify({ copyFrom }) : undefined,
+    }),
 
   snapshot: (id: string, view: View, device?: string) => {
     const params = new URLSearchParams({ id, view })

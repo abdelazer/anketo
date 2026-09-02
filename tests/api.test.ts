@@ -374,6 +374,67 @@ describe('reset', () => {
   })
 })
 
+describe('duplicate', () => {
+  it('copies the title, timer and questions into a fresh draft', async () => {
+    const poll = await makePoll([CHOICE, TEXT], 45, 'Retro warm-up')
+    const { id } = ok(await api.create(poll.id))
+    expect(id).not.toBe(poll.id)
+
+    const copy = ok(await api.snapshot(id, 'create')).poll
+    expect(copy.title).toBe('Copy of Retro warm-up')
+    expect(copy.durationSec).toBe(45)
+    expect(copy.questions.map((q) => q.prompt)).toEqual([CHOICE.prompt, TEXT.prompt])
+    expect(copy.questions.map((q) => q.type)).toEqual(['choice', 'text'])
+    expect(copy.questions[0].options.map((o) => o.text)).toEqual(CHOICE.options)
+
+    // A copy is a poll nobody has run yet, whatever state the source was in.
+    expect(copy.phase).toBe('draft')
+    expect(copy.currentIndex).toBe(-1)
+    expect(copy.run).toBe(1)
+    expect(copy.readyAtByQ).toEqual({})
+  })
+
+  it('leaves an untitled poll untitled rather than naming it "Copy of "', async () => {
+    const poll = await makePoll([CHOICE], 10, '')
+    const { id } = ok(await api.create(poll.id))
+    expect(ok(await api.snapshot(id, 'create')).poll.title).toBe('')
+  })
+
+  it('carries none of the original answers, and leaves the original alone', async () => {
+    const poll = await makePoll([CHOICE], 10, 'Standup')
+    ok(await api.act(poll.id, 'start'))
+    ok(await api.answer(poll.id, poll.q[0], device(1), poll.o[0][0]))
+    ok(await api.act(poll.id, 'complete'))
+
+    const { id } = ok(await api.create(poll.id))
+    const copy = ok(await api.snapshot(id, 'create'))
+    expect(Object.values(copy.responseCounts).reduce((a, b) => a + b, 0)).toBe(0)
+    expect(ok(await api.snapshot(id, 'respond', device(1))).mine).toEqual({})
+
+    // The point of duplicating rather than resetting: the source keeps its run.
+    const original = ok(await api.snapshot(poll.id, 'create'))
+    expect(original.poll.phase).toBe('complete')
+    expect(original.responseCounts[poll.q[0]]).toBe(1)
+  })
+
+  it('is editable immediately, unlike the running poll it came from', async () => {
+    const poll = await makePoll([CHOICE], 10, 'Standup')
+    ok(await api.act(poll.id, 'start'))
+    expect((await api.save(poll.id, undefined, { questions: [] })).status).toBe(409)
+
+    const { id } = ok(await api.create(poll.id))
+    const copy = ok(await api.snapshot(id, 'create')).poll
+    const edited = ok(await api.save(id, copy.rev, { ...copy, title: 'Standup, week 2' }))
+    expect(edited.poll.title).toBe('Standup, week 2')
+  })
+
+  it('404s a copyFrom that names no poll', async () => {
+    const result = await api.create('zzzzzzz')
+    expect(result.status).toBe(404)
+    expect(result.body.error).toMatch(/no poll/i)
+  })
+})
+
 describe('validation and errors', () => {
   it('404s an unknown poll id', async () => {
     const result = await api.snapshot('zzzzzzz', 'lead')
