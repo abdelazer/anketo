@@ -21,10 +21,14 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
   const store = new PollStore(pollId, 'create')
 
   let draft: Poll | null = null
-  let dirty = false
-  let saving = false
+  /** Bumped by every edit; a save only clears the flag for what it actually sent. */
+  let edits = 0
+  let savedEdits = 0
+  let inFlight: Promise<void> | null = null
   let saveTimer: number | undefined
   let disposed = false
+
+  const dirty = () => edits !== savedEdits
 
   const status = h('span', { class: 'save-status', text: '' })
   const questionList = h('div', { class: 'stack' })
@@ -48,50 +52,74 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
   // --- Saving --------------------------------------------------------------
 
   function markDirty(): void {
-    dirty = true
+    edits++
     setText(status, 'Saving…')
     window.clearTimeout(saveTimer)
     saveTimer = window.setTimeout(() => void save(), SAVE_DEBOUNCE_MS)
   }
 
   async function save(): Promise<void> {
-    if (!draft || saving || !dirty || disposed) return
-    saving = true
+    // A caller that arrives mid-request waits for it rather than dropping its
+    // edit on the floor; the follow-up below is what actually sends that edit.
+    if (inFlight) return inFlight
+    if (!draft || !dirty() || disposed) return
+
     const attempted = draft
-    try {
-      const snapshot = await api.save(pollId, attempted.rev, {
-        title: attempted.title,
-        durationSec: attempted.durationSec,
-        questions: attempted.questions,
-      })
-      // Keep the local text (the user may have typed during the round trip)
-      // but adopt the server's new revision so the next save's CAS matches.
-      draft = { ...attempted, rev: snapshot.poll.rev }
-      dirty = false
-      store.apply(snapshot)
-      setText(status, 'Saved')
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 409) {
-        // Another device won. Theirs is authoritative; take it and say so.
-        dirty = false
-        await store.refresh()
-        if (store.snapshot) adopt(store.snapshot.poll, { force: true })
-        showBanner(error.message + ' Reloaded the latest version.')
-        setText(status, '')
-      } else {
-        setText(status, 'Offline — will retry')
-        window.clearTimeout(saveTimer)
-        saveTimer = window.setTimeout(() => void save(), 3000)
+    // Only the edits made before the request went out are covered by it.
+    const sent = edits
+    let sendAgain = false
+
+    inFlight = (async () => {
+      try {
+        const snapshot = await api.save(pollId, attempted.rev, {
+          title: attempted.title,
+          durationSec: attempted.durationSec,
+          questions: attempted.questions,
+        })
+        // Take the server's new revision so the next save's CAS matches, but
+        // in place: the live DOM handlers write straight into this object, and
+        // the user may have typed during the round trip.
+        if (draft === attempted) attempted.rev = snapshot.poll.rev
+        savedEdits = sent
+        store.apply(snapshot)
+        sendAgain = dirty()
+        setText(status, sendAgain ? 'Saving…' : 'Saved')
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          // Another device won. Theirs is authoritative; take it and say so.
+          savedEdits = edits
+          await store.refresh()
+          if (store.snapshot) adopt(store.snapshot.poll, { force: true })
+          showBanner(error.message + ' Reloaded the latest version.')
+          setText(status, '')
+        } else {
+          setText(status, 'Offline — will retry')
+          window.clearTimeout(saveTimer)
+          saveTimer = window.setTimeout(() => void save(), 3000)
+        }
       }
+    })()
+
+    try {
+      await inFlight
     } finally {
-      saving = false
+      inFlight = null
+    }
+
+    // Anything typed while that request was open is still only on this device.
+    if (sendAgain && !disposed) {
+      window.clearTimeout(saveTimer)
+      await save()
     }
   }
 
   /** Push any pending edit before an action that depends on it landing. */
   async function flush(): Promise<void> {
     window.clearTimeout(saveTimer)
-    if (dirty) await save()
+    // An open request may predate the newest edit, so wait it out before
+    // deciding — never navigate away on the strength of a PUT already in air.
+    if (inFlight) await inFlight.catch(() => {})
+    if (dirty()) await save()
   }
 
   function showBanner(message: string): void {
@@ -103,7 +131,7 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
 
   function adopt(poll: Poll, options: { force?: boolean } = {}): void {
     // Never let a poll fetch overwrite what someone is in the middle of typing.
-    if (!options.force && dirty) return
+    if (!options.force && dirty()) return
     if (!options.force && draft && poll.rev === draft.rev) return
     draft = structuredClone(poll)
     render()
@@ -463,7 +491,7 @@ export function mountCreate(root: HTMLElement, pollId: string): () => void {
 
   // A last-ditch save when the tab goes away mid-edit.
   const onHide = () => {
-    if (dirty) void save()
+    if (dirty()) void save()
   }
   window.addEventListener('pagehide', onHide)
   document.addEventListener('visibilitychange', onHide)

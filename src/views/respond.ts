@@ -122,8 +122,10 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
         // Seeded on the device so the order is stable for this person across
         // re-renders and refreshes, but different from their neighbour's.
         options: seededShuffle(question.options, `${device}:${question.id}`),
+        // Both faces show the optimistic answer: a typed answer must survive in
+        // the box until the POST lands, or a failed send leaves nothing to retry.
         selected: pending ?? mine,
-        textValue: mine,
+        textValue: pending ?? mine,
         // A locked question stays readable but stops accepting changes.
         disabled: locked && mine !== undefined,
         onChoose: (optionId) => void submit(question.id, optionId),
