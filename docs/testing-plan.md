@@ -1,9 +1,14 @@
 # Plan: automated testing for Anketo
 
-For a session starting cold. There are currently **no committed tests**. This
-document exists because everything below was verified once, by hand, in a
+For a session starting cold.
+
+**Status: layer 3 (API integration) is implemented and passing** — 38 tests in
+`tests/api.test.ts`, run with `npm test`. Layers 1, 2, 4 and 5 are not written
+yet; the assertions below are the specification for them.
+
+This document exists because everything here was verified once, by hand, in a
 session whose context is now gone — the assertions are written out in full so
-they can be re-implemented without rediscovering them.
+they can be implemented without rediscovering them.
 
 ## Why this matters here
 
@@ -135,10 +140,20 @@ its own key space.
 
 ---
 
-## Layer 3 — API integration (against `netlify dev`)
+## Layer 3 — API integration (against `netlify dev`) — **DONE**
 
-Boot `netlify dev` once for the file. These are the 28 assertions verified by
-hand; reproduce all of them.
+Implemented in `tests/api.test.ts` (38 tests, ~35s). `tests/setup/netlify-dev.ts`
+reuses a dev server already listening on :8888, or boots one and tears it down
+afterwards, so `npm test` works from a cold checkout. Point it elsewhere with
+`ANKETO_BASE_URL` to run the same suite against a deploy preview.
+
+Two conventions worth keeping if you extend it: ids are always read back from
+the response rather than assumed (the server regenerates any id that does not
+match its shape, and an early version of this suite silently tested a poll
+whose questions it had never written), and `waitForReveal` sleeps against the
+*server's* clock rather than a fixed wall-clock interval.
+
+The assertions, all covered:
 
 ### Lifecycle
 1. `POST /api/poll` returns a 7-character id and a draft poll with one blank
@@ -194,6 +209,12 @@ hand; reproduce all of them.
 28. Editing a running poll is refused with 409.
 29. Duration, prompt length and duplicate-option-id sanitising all hold over
     the real API, not just the unit under test.
+30. A hostile draft save cannot move the poll's run state — `phase`,
+    `currentIndex`, `run` and `readyAtByQ` are ignored from the payload.
+31. **Completing a poll does not reveal a question whose countdown never
+    expired.** Found by a failing test while porting this suite: reveal is a
+    function of the countdown, not of the poll being over, so cutting a poll
+    short must not hand the room answers it never earned.
 
 ---
 
@@ -271,15 +292,16 @@ most failures report fast; let 3–5 run separately.
 
 ## Suggested order
 
-1. Layer 1 and 2 (pure) — cheapest, and they lock down the reveal and tally
-   rules that everything else depends on.
-2. API assertion 14, the concurrency test — highest value per line in the
-   whole plan, because it guards a bug that already happened.
-3. The rest of layer 3.
-4. E2E scenarios 1 and 2.
-5. Layer 4 and the remaining E2E.
+1. ~~Layer 3~~ — done.
+2. Layer 1 and 2 (pure) — cheapest, and they lock down the reveal and tally
+   rules everything else depends on. Layer 3 exercises them only through HTTP,
+   so the edge cases (null vs zero in `revealAt`, `secondsLeft` ceiling,
+   shuffle determinism) are still unguarded.
+3. E2E scenarios 1 and 2 — the two-Lead-device flip is the one behaviour no
+   other layer can reach.
+4. Layer 4 (client store), then the remaining E2E.
 
-A note for whoever picks this up: an ad-hoc Python version of layer 3 existed
-during the build session under the scratchpad directory and may still be
-present, but it was never committed and should be treated as lost. The
-assertion list above is the durable record.
+**CI is not wired up yet.** The blocker to check first: whether `netlify dev`
+will start in a GitHub Actions runner without Netlify credentials. It works
+locally against an unlinked site, which suggests the Blobs emulator is purely
+local, but that has not been confirmed — do not assume it.

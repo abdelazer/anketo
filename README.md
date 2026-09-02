@@ -135,3 +135,14 @@ Per poll: 50 questions, 10 options each, 400 devices per question, 140
 characters per text answer. Polls have no expiry, and answer keys from previous
 runs are orphaned rather than deleted — both fine at this scale, and worth
 revisiting if this ever ran somewhere busy.
+
+## Tests
+
+```sh
+npm test        # 38 API integration tests against a real netlify dev
+```
+
+`tests/setup/netlify-dev.ts` reuses a dev server already on :8888 or boots one
+and tears it down after. Set `ANKETO_BASE_URL` to run the same suite against a
+deploy preview. See `docs/testing-plan.md` for the layers that are still to be
+written.
