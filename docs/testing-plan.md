@@ -58,9 +58,15 @@ as a round trip without a store.
 
 ---
 
-## Layer 1 — pure units (`shared/poll.ts`, `src/device.ts`)
+## Layer 1 — pure units (`shared/poll.ts`, `src/device.ts`, `src/pacing.ts`)
 
 Fast, no I/O, no clock. These should be the bulk of the suite.
+
+`src/pacing.ts` is covered (`tests/pacing.test.ts`): auto-advance moves a
+respondent's screen for them, so its refusals — an unanswered question, a
+countdown still running, a position level with or ahead of the Leader — are
+asserted alongside the case it accepts. The rest of this layer is still to
+write.
 
 ### Reveal and timing
 - `revealAt` returns `readyAt + durationSec * 1000`.
@@ -269,9 +275,13 @@ Few, slow, high value. Use a short `durationSec` (2–3s) to keep them quick.
 2. **Two Lead devices flip together.** Two Lead contexts on the same poll;
    after the countdown both show results within ~1s of each other. Then press
    Next on the *second* device and assert the first follows.
-3. **Respondent pacing.** With the Leader on question 2, a respondent still on
-   question 1 sees their locked answer and a Next button, is *not* dragged
-   forward, and reaches question 2 only after tapping it.
+3. **Respondent pacing.** With the Leader on question 2, a respondent still
+   answering question 1 is *not* dragged forward while its countdown runs. Once
+   question 1 locks, a respondent who answered it lands on question 2 by
+   itself, and one who never answered stays put with a Next button and the
+   "you can still answer" offer intact. The decision itself is covered by
+   `tests/pacing.test.ts`; what only E2E can show is that the screen actually
+   moves, and that the confirmation is readable before it does.
 4. **Refresh mid-countdown** on Lead and on Respond resumes with the correct
    remaining seconds (assert it is close to expected, not exact).
 5. **Shuffle stability.** A respondent's option order is identical after a

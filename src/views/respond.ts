@@ -1,6 +1,7 @@
 import { api } from '../api'
 import { deviceId, safeGet, safeSet, seededShuffle } from '../device'
 import { h, replace, setText, toast } from '../dom'
+import { ADVANCE_AFTER_MS, shouldAutoAdvance } from '../pacing'
 import { PollStore } from '../store'
 import { questionFace } from './question'
 import { brand, errorScreen, spinner } from './shell'
@@ -9,9 +10,11 @@ import { isRevealed, secondsLeft, type Snapshot } from '../../shared/poll'
 /**
  * Respond mode — one person, one phone.
  *
- * Respondents move through the poll at their own pace behind the Leader: the
- * Leader making question 3 Ready never yanks question 2 out from under someone
- * mid-answer. They get a Next button instead, exactly as specified.
+ * Respondents move through the poll behind the Leader: the Leader making
+ * question 3 Ready never yanks question 2 out from under someone mid-answer.
+ * Once this phone is finished with a question — answered, and the countdown
+ * spent — it follows the room on its own a beat later (see `../pacing`);
+ * anyone still mid-question keeps their place and a manual Next button.
  */
 export function mountRespond(root: HTMLElement, pollId: string): () => void {
   const device = deviceId()
@@ -30,6 +33,8 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
    * half-written answer vanishes when the timer expires mid-sentence.
    */
   let draft: { questionId: string; value: string } | null = null
+  /** Set while the "Answer locked in" beat before an auto-advance is running. */
+  let advanceTimer: number | undefined
 
   const stage = h('div', { class: 'grow stage' })
   const bottom = h('div', { class: 'respond-bottom' })
@@ -52,6 +57,36 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
   function setIndex(index: number): void {
     viewIndex = index
     safeSet(positionKey, String(index))
+  }
+
+  // --- Moving between questions --------------------------------------------
+
+  function goTo(index: number, snapshot: Snapshot): void {
+    cancelAdvance()
+    setIndex(Math.min(index, snapshot.poll.currentIndex))
+    pending = null
+    sceneKey = ''
+    render(snapshot)
+    store.quicken()
+  }
+
+  function cancelAdvance(): void {
+    window.clearTimeout(advanceTimer)
+    advanceTimer = undefined
+  }
+
+  /** Arm the beat once; the tick loop asks for this five times a second. */
+  function armAdvance(): void {
+    if (advanceTimer !== undefined) return
+    advanceTimer = window.setTimeout(() => {
+      advanceTimer = undefined
+      // The poll can be reset, completed or reloaded during the beat, so the
+      // decision is made again against the state as it stands now.
+      const latest = store.snapshot
+      if (!latest || store.error || pending !== null) return
+      if (!shouldAutoAdvance(latest, viewIndex, store.serverNow())) return
+      goTo(viewIndex + 1, latest)
+    }, ADVANCE_AFTER_MS)
   }
 
   // --- Scene selection -----------------------------------------------------
@@ -170,7 +205,10 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
       )
     }
 
-    if (!key.startsWith('q:')) return
+    if (!key.startsWith('q:')) {
+      cancelAdvance()
+      return
+    }
     const question = poll.questions[viewIndex]
     if (!question) return
 
@@ -182,9 +220,20 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
     const left = secondsLeft(poll, question.id, store.serverNow())
     const hasNext = viewIndex < poll.currentIndex
 
+    // Finished here and the room has moved on: hold the confirmation for a
+    // beat, then follow. An answer still in flight waits for its response
+    // first, so a failed send is reported on the question it belongs to.
+    const auto = pending === null && shouldAutoAdvance(snapshot, viewIndex, store.serverNow())
+    if (auto) armAdvance()
+    else cancelAdvance()
+
+    // The button stays for the cases auto-advance deliberately skips: a
+    // question this phone never answered, and one whose timer is still running.
+    const showNext = hasNext && !auto
+
     // Rebuild the footer only when its shape changes; the timer text is patched
     // in place so it does not flicker every 200ms.
-    const shape = `${locked}:${mine !== undefined}:${hasNext}`
+    const shape = `${locked}:${mine !== undefined}:${hasNext}:${showNext}`
     if (foot.getAttribute('data-shape') !== shape) {
       foot.setAttribute('data-shape', shape)
       replace(
@@ -207,21 +256,15 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
           mine !== undefined &&
           !hasNext &&
           h('p', { class: 'muted small', text: 'Waiting for the next question…' }),
-        hasNext &&
+        showNext &&
           h(
             'button',
             {
               class: 'btn btn--primary btn--block btn--big',
               type: 'button',
-              on: {
-                click: () => {
-                  setIndex(Math.min(viewIndex + 1, poll.currentIndex))
-                  pending = null
-                  sceneKey = ''
-                  render(snapshot)
-                  store.quicken()
-                },
-              },
+              // The footer may have been built several polls ago; move against the
+              // Leader's position as it stands at the tap.
+              on: { click: () => goTo(viewIndex + 1, store.snapshot ?? snapshot) },
             },
             'Next question',
           ),
@@ -285,6 +328,7 @@ export function mountRespond(root: HTMLElement, pollId: string): () => void {
   store.start()
 
   return () => {
+    cancelAdvance()
     untick()
     unsubscribe()
     store.stop()
