@@ -1,14 +1,18 @@
-# Plan: deploy Anketo to production
+# Deploying Anketo
 
 For a session starting cold. Everything you need to know is here; you should
 not need to read the whole codebase first.
+
+This was a plan before anything shipped. The repo-side work it called for is
+now done — see **What changed** at the bottom for the list — so what remains is
+the operational sequence, which is short.
 
 ## What you are deploying
 
 A static Vite site plus three Netlify Functions, using Netlify Blobs as the
 only datastore. Repo: `abdelazer/anketo`. `netlify.toml` already declares the
-build command, the publish directory, the `/api/*` rewrite and the SPA
-catch-all — you should not need to change it.
+build command, the publish directory, the Node version, the `/api/*` rewrite
+and the SPA catch-all — you should not need to change it.
 
 ```
 netlify/functions/poll.mts     GET snapshot · POST create · PUT edit
@@ -16,24 +20,12 @@ netlify/functions/action.mts   POST start | next | complete | reset
 netlify/functions/answer.mts   POST one answer
 shared/poll.ts                 model + reveal/tally rules (imported by both halves)
 shared/server.ts               Blobs access, validation, snapshot assembly
+scripts/smoke.mjs              the post-deploy check, against any base URL
 ```
 
-State of things as of writing: verified working end-to-end under `netlify dev`
-(28 API assertions plus a manual three-tab browser pass). **Never deployed.**
-The Netlify CLI is installed and logged in.
-
-## The one real risk
-
-`netlify/functions/*.mts` import from `../../shared/*`, which is **outside the
-functions directory**. Locally the bundler resolves this fine. It is very
-likely fine in production too — `netlify dev` uses the same zip-it-and-ship-it
-/ esbuild path — but it has not been proven on Netlify's build image, and a
-resolution failure there would take down the whole API while the static site
-kept serving happily.
-
-**So: deploy to a preview first and hit the API before touching production.**
-If it does fail, the fix is `[functions] included_files` in `netlify.toml`, or
-collapsing `shared/` into the functions directory.
+State of things as of writing: 38 API tests green against `netlify dev`, plus a
+manual three-tab browser pass. The Netlify CLI is installed and logged in.
+**Never deployed.**
 
 ## Steps
 
@@ -51,57 +43,67 @@ Confirm with `netlify status` that the repo is linked to the site you expect.
 ```sh
 npm ci && npm run build
 netlify deploy            # draft URL, does NOT touch production
+npm run smoke -- https://<draft-url>
 ```
 
-Against the draft URL, run the API suite that already exists. It currently
-points at `localhost:8888`; parameterise the base URL rather than editing it
-in place:
+`scripts/smoke.mjs` takes seconds and covers what is specific to being
+deployed: the functions load at all, a write is readable back, `next` is
+visible to the very next read, an answer round-trips, and no tally goes on the
+wire before a countdown ends. Anything red here is a deploy problem, not a
+logic problem — the logic has its own suite.
+
+The slower, thorough option is that suite, pointed at the same URL:
 
 ```sh
-python3 docs/../scripts/api-smoke.py https://<draft-url>   # see note below
+ANKETO_BASE_URL=https://<draft-url> npm test
 ```
 
-There is no `scripts/api-smoke.py` in the repo yet — the suite was written in
-a scratch directory during the build session and not committed. Recreating it
-is the first task of the **testing plan** (`docs/testing-plan.md`), which
-specifies it in full. If you are deploying before that lands, the minimum
-manual check is:
+It waits out real countdowns, so it takes minutes. Run it once against the
+first preview; after that the smoke script is enough per-deploy.
+
+### 3. Check preview isolation before pointing traffic anywhere real
+
+`shared/server.ts` reaches the site-global store — the one holding live polls —
+only when the environment positively identifies itself as production
+(`CONTEXT=production`) or as local dev (`NETLIFY_DEV`/`NETLIFY_LOCAL`).
+Everything else, an environment setting none of them included, gets
+`getDeployStore` and writes to its own deploy.
+
+That direction is deliberate. `CONTEXT` is build metadata, and this repo has
+not established that the deployed Functions runtime carries it; if it were
+missing under an allowlist-style check, a preview's Start button would write to
+production and nothing would report it. Under this check a missing `CONTEXT`
+instead means "the preview cannot see production data", which is visible in
+seconds.
+
+Verify it on the real backend rather than trusting the local emulator:
 
 ```sh
-BASE=https://<draft-url>
-ID=$(curl -s -XPOST $BASE/api/poll | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
-curl -s "$BASE/api/poll?id=$ID&view=create" | head -c 300   # must be JSON, not an error
+npm run smoke -- https://<draft-url> --isolated-from https://<prod-url>
 ```
 
-A 500 here with a module-resolution error in the function log is the failure
-mode described above.
+The extra check creates a poll on the preview and asserts production returns
+404 for its code. If it returns 200, the two are sharing a store — meaning the
+preview is being taken for production, so check what `CONTEXT` is actually set
+to in the function log before running any preview traffic.
 
-### 3. Check Blobs behaves in production
-
-Two things to verify rather than assume:
-
-- **Strong consistency.** `shared/server.ts` requests
-  `getStore({ name: 'anketo', consistency: 'strong' })`. The whole Leader→
-  respondent handoff depends on it. Confirm a `next` action is immediately
-  visible to a subsequent `GET`.
-- **Deploy-preview isolation.** Previews may share the production Blobs store,
-  since the code uses `getStore` rather than `getDeployStore`. Verify this
-  before running preview traffic against a live poll — if they do share,
-  either accept it, or switch to a deploy-scoped store for non-production
-  contexts. Do not guess; check what a preview actually writes.
+The same run also confirms the other direction, which the inverted check makes
+the one worth watching for: if **production** smoke fails to read back a poll
+it just created, production is not being recognised as production and is
+sitting on a deploy-scoped store.
 
 ### 4. Promote to production
 
 ```sh
 netlify deploy --prod
+npm run smoke -- https://<prod-url>
 ```
 
-Then connect the GitHub repo in the Netlify UI so `main` auto-deploys, and
-set Node to 20+ (the local build used Node 25; `netlify.toml` pins nothing).
+Then connect the GitHub repo in the Netlify UI so `main` auto-deploys.
 
 ### 5. Post-deploy smoke test, in a browser
 
-The API suite does not cover the parts most likely to break on a real host:
+Neither suite covers the parts most likely to break on a real host:
 
 - **QR code.** Lobby QR encodes `location.origin` — confirm it points at the
   production hostname, not localhost, and that a phone actually scans it.
@@ -125,7 +127,8 @@ Netlify DNS or an external CNAME; nothing in the app hardcodes a hostname.
   occasional use; worth measuring before anyone leans on it.
 - **100GB bandwidth**, not a concern at ~17kB gzipped JS.
 - **Blobs storage.** Answer keys from previous runs are orphaned rather than
-  deleted (see README). Tiny, but unbounded over time.
+  deleted (see README), and every smoke run leaves a draft poll behind. Tiny,
+  but unbounded over time.
 
 ## Rollback
 
@@ -133,6 +136,26 @@ Netlify DNS or an external CNAME; nothing in the app hardcodes a hostname.
 migrations — the data model is append-only per run, and `loadPoll` already
 defaults a missing `run` field, so an older build will not choke on newer
 documents.
+
+## What changed to make this deployable
+
+Four things, all in the PR that turned this plan into a runbook:
+
+- **The functions bundle cleanly.** The original worry was that
+  `netlify/functions/*.mts` import from `../../shared`, outside the functions
+  directory, and that this had only ever been proven under `netlify dev`.
+  It holds: `netlify build` then unzipping `.netlify/functions/poll.zip` shows
+  esbuild inlines `shared/` into the function and leaves no relative import
+  behind — the only surviving import is `@netlify/blobs`, vendored into the
+  zip. Worth re-checking that way if the bundler config ever changes.
+- **`@netlify/blobs` moved to `dependencies`.** It was a devDependency, which
+  worked only because Netlify installs those by default. Any build configured
+  to skip dev dependencies would have shipped functions that cannot start.
+- **Node is pinned** to 22 in `netlify.toml`. Nothing was pinned before, so a
+  build-image default could have moved under the site.
+- **Preview deploys got their own Blobs store**, as described in step 3. The
+  code used `getStore` unconditionally, which is site-global: every preview
+  would have been reading and writing production's live polls.
 
 ## Explicitly out of scope
 
