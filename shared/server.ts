@@ -16,7 +16,7 @@
  *   - "Reset all answers" is `run + 1`, an O(1) write, instead of deleting
  *     thousands of keys.
  */
-import { getStore, type Store } from '@netlify/blobs'
+import { getDeployStore, getStore, type Store } from '@netlify/blobs'
 import {
   DEFAULT_DURATION,
   MAX_DEVICES,
@@ -40,8 +40,32 @@ import {
  * Strong consistency is not optional: a Leader pressing "Next question" and a
  * respondent's very next fetch are causally linked, and eventual consistency
  * would show them the previous question.
+ *
+ * Which store, though, is a safety question rather than a correctness one. The
+ * global store is shared with production, so a preview deploy reaching it means
+ * opening a pull request's preview and pressing Start would be pressing Start
+ * on a live poll.
+ *
+ * So the global store is opt-in, not the default: an environment has to
+ * positively identify itself as production or as local dev to get it, and
+ * anything else — including an environment that sets none of these, which is
+ * not something this repo can prove the Functions runtime never does — falls
+ * through to a store scoped to its own deploy. The failure that leaves is "a
+ * preview cannot see production data", which is obvious within seconds. The
+ * inverse failure is silent writes to live polls.
+ *
+ * `NETLIFY_DEV` and `NETLIFY_LOCAL` are both set to `'true'` by `netlify dev`,
+ * alongside `CONTEXT=dev`; production deploys set `CONTEXT=production`.
  */
-const store = (): Store => getStore({ name: 'anketo', consistency: 'strong' })
+export const usesGlobalStore = (): boolean =>
+  process.env.CONTEXT === 'production' ||
+  process.env.NETLIFY_DEV === 'true' ||
+  process.env.NETLIFY_LOCAL === 'true'
+
+const store = (): Store => {
+  const options = { name: 'anketo', consistency: 'strong' } as const
+  return usesGlobalStore() ? getStore(options) : getDeployStore(options)
+}
 
 const POLL_KEY = (id: string) => `polls/${id}`
 const RUN_PREFIX = (id: string, run: number) => `a/${id}/${run}/`
