@@ -42,9 +42,12 @@ npm run smoke -- https://<deploy-url>
 ```
 
 which takes seconds and asserts the things that are specific to being deployed
-rather than to the logic. `docs/deploy-plan.md` is the full runbook. Preview
-deploys write to their own Blobs store, so a pull request's preview can never
-touch a live poll.
+rather than to the logic. `docs/deploy-plan.md` is the full runbook.
+
+The Blobs store holding live polls is reached only by an environment that
+identifies itself as production or as local dev; anything else writes to a
+store scoped to its own deploy. So a pull request's preview cannot touch a live
+poll, and an environment nobody anticipated is isolated rather than trusted.
 
 ## How it works
 

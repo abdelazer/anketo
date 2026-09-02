@@ -105,7 +105,10 @@ async function main() {
   // 3. A real poll, so the action endpoints have something to act on.
   const saved = await it.save(id, fetched.body.poll?.rev, {
     title: 'Smoke test',
-    durationSec: 5,
+    // Long enough that the three round trips below cannot outrun the countdown
+    // on a cold deploy — which is the exact run the reveal-gate check exists
+    // for. Nothing here waits for expiry, so a large value costs no time.
+    durationSec: 120,
     questions: [
       { type: 'choice', prompt: 'First?', options: [{ text: 'A' }, { text: 'B' }] },
       { type: 'choice', prompt: 'Second?', options: [{ text: 'C' }, { text: 'D' }] },

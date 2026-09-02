@@ -63,19 +63,34 @@ first preview; after that the smoke script is enough per-deploy.
 
 ### 3. Check preview isolation before pointing traffic anywhere real
 
-`shared/server.ts` now uses `getDeployStore` under `deploy-preview` and
-`branch-deploy`, and `getStore` otherwise, so a preview writes to its own
-store and cannot touch a live poll. Verify it holds on the real backend rather
-than trusting the local emulator:
+`shared/server.ts` reaches the site-global store — the one holding live polls —
+only when the environment positively identifies itself as production
+(`CONTEXT=production`) or as local dev (`NETLIFY_DEV`/`NETLIFY_LOCAL`).
+Everything else, an environment setting none of them included, gets
+`getDeployStore` and writes to its own deploy.
+
+That direction is deliberate. `CONTEXT` is build metadata, and this repo has
+not established that the deployed Functions runtime carries it; if it were
+missing under an allowlist-style check, a preview's Start button would write to
+production and nothing would report it. Under this check a missing `CONTEXT`
+instead means "the preview cannot see production data", which is visible in
+seconds.
+
+Verify it on the real backend rather than trusting the local emulator:
 
 ```sh
 npm run smoke -- https://<draft-url> --isolated-from https://<prod-url>
 ```
 
 The extra check creates a poll on the preview and asserts production returns
-404 for its code. If it returns 200, the two are sharing a store and the
-context detection is not firing — check what `CONTEXT` is actually set to in
-the function log before running any preview traffic.
+404 for its code. If it returns 200, the two are sharing a store — meaning the
+preview is being taken for production, so check what `CONTEXT` is actually set
+to in the function log before running any preview traffic.
+
+The same run also confirms the other direction, which the inverted check makes
+the one worth watching for: if **production** smoke fails to read back a poll
+it just created, production is not being recognised as production and is
+sitting on a deploy-scoped store.
 
 ### 4. Promote to production
 
