@@ -1,0 +1,24 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[dev]
+  command = "npm run dev:vite"
+  targetPort = 5173
+  framework = "#custom"
+
+# API first, so it wins over the SPA catch-all below.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Every mode URL is a real, refreshable address handled by the client router.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -1,0 +1,36 @@
+{
+  "name": "anketo",
+  "version": "0.1.0",
+  "description": "Snap polls for a room",
+  "scripts": {
+    "dev": "netlify dev",
+    "dev:vite": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abdelazer/anketo.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/abdelazer/anketo/issues"
+  },
+  "homepage": "https://github.com/abdelazer/anketo#readme",
+  "devDependencies": {
+    "@netlify/blobs": "^11.0.3",
+    "@types/node": "^26.4.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
+  },
+  "private": true
+}
