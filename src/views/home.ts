@@ -34,7 +34,7 @@ export function mountHome(root: HTMLElement): () => void {
       h(
         'div',
         { class: 'grow stack home-hero' },
-        h('h1', { class: 'display', text: 'Snap polls for a room.' }),
+        h('h1', { class: 'display', text: 'Snap polls without fuss' }),
         h('p', {
           class: 'lede secondary-text',
           text: 'Write a few questions, put a QR code on the screen, and watch the answers land. No accounts, no apps.',
